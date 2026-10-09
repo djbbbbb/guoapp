@@ -59,7 +59,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          xcrun lipo -verify_arch arm64 build/ios/iphoneos/Runner.app/Runner
+          xcrun lipo build/ios/iphoneos/Runner.app/Runner -verify_arch arm64
           python3 - <<'PY'
           from pathlib import Path
           import plistlib
