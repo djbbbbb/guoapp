@@ -8,17 +8,57 @@ class DiaryService {
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
   /// 记录一条日记
-  static void add(String message) {
+  static void add(
+    String message, {
+    Iterable<String> sensitiveValues = const [],
+  }) {
+    final safeMessage = sanitize(message, sensitiveValues: sensitiveValues);
     final now = DateTime.now();
     final timeStr =
         '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}.${(now.millisecond ~/ 100)}';
-    final entry = '[$timeStr] $message';
+    final entry = '[$timeStr] $safeMessage';
     _entries.add(entry);
     if (_entries.length > maxEntries) {
       _entries.removeRange(0, _entries.length - maxEntries);
     }
     revision.value++;
-    debugPrint('[Diary] $message');
+    debugPrint('[Diary] $safeMessage');
+  }
+
+  static String sanitize(
+    String message, {
+    Iterable<String> sensitiveValues = const [],
+  }) {
+    var result = message;
+    for (final value in sensitiveValues) {
+      if (value.isNotEmpty) result = result.replaceAll(value, '[redacted]');
+    }
+    result = result.replaceAllMapped(
+      RegExp(r'''(?:https?|file)://[^\s<>"']+''', caseSensitive: false),
+      (match) {
+        final uri = Uri.tryParse(match.group(0)!);
+        if (uri == null || uri.host.isEmpty) return '[redacted-url]';
+        return '${Uri(scheme: uri.scheme, host: uri.host, port: uri.hasPort ? uri.port : null)}/[redacted]';
+      },
+    );
+    result = result.replaceAllMapped(
+      RegExp(
+        r'''\b(authorization|cookie|set-cookie|x-api-key|x-auth-token)\s*["']?\s*[:=]\s*[^\r\n]*''',
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(1)}=[redacted]',
+    );
+    result = result.replaceAllMapped(
+      RegExp(
+        r'''\b(decryption[_-]?key|key|access[_-]?token|auth[_-]?token|signature|password|secret)\s*["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|\[[^\]]*\]|[^\s,;\]}]+)''',
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(1)}=[redacted]',
+    );
+    return result.replaceAll(
+      RegExp(r'\b[a-fA-F0-9]{32,}\b'),
+      '[redacted]',
+    );
   }
 
   /// 获取当前所有日记副本

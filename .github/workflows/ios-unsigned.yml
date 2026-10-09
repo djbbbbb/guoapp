@@ -50,6 +50,14 @@ jobs:
           flutter --version
           flutter precache --ios
           flutter doctor -v
+      - name: Check playback regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd native && go test ./core -run 'TestNative(HLS|Stream)' -count=1 -v) 2>&1 | tee ios-playback-checks.log
+          flutter pub get --enforce-lockfile 2>&1 | tee -a ios-playback-checks.log
+          flutter test --dart-define=DISABLE_REMOTE_IMAGES=true test/diary_service_test.dart 2>&1 | tee -a ios-playback-checks.log
+          flutter test --dart-define=DISABLE_REMOTE_IMAGES=true test/player_screen_test.dart --plain-name 'duplicate errors switch once while keeping progress, rate and pause state' 2>&1 | tee -a ios-playback-checks.log
       - name: Build all-sources unsigned IPA
         shell: bash
         run: |
@@ -98,6 +106,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: zhenguojian-ios-build-log
-          path: ios-build.log
+          path: |
+            ios-build.log
+            ios-playback-checks.log
           if-no-files-found: ignore
           retention-days: 14

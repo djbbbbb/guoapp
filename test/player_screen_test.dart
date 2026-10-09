@@ -1,6 +1,7 @@
 import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/models.dart';
 import 'package:duanju_app/player_screen.dart';
+import 'package:duanju_app/diary_service.dart';
 import 'package:duanju_app/app_layout.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +13,8 @@ import 'fixtures.dart';
 import 'player_fixtures.dart';
 
 void main() {
+  setUp(DiaryService.clear);
+
   Future<void> settleOperations(WidgetTester tester) async {
     for (var i = 0; i < 12; i++) {
       await tester.pump(const Duration(milliseconds: 10));
@@ -89,6 +92,11 @@ void main() {
       expect(player.played.last, isFalse);
       expect(repository.active.length, 1);
       expect(find.text('暂时无法播放'), findsNothing);
+      expect(DiaryService.fullText, contains('播放器异步错误'));
+      expect(DiaryService.fullText, contains('synthetic network failure'));
+      expect(DiaryService.fullText, contains('action=alternative'));
+      expect(DiaryService.fullText, contains('position=28000ms'));
+      expect(DiaryService.fullText, isNot(contains('working-route-')));
       await unmount(tester, player);
       expect(repository.active, isEmpty);
     },

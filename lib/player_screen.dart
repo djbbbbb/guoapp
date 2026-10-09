@@ -232,9 +232,21 @@ class _PlayerScreenState extends State<PlayerScreen>
     _configurePictureInPicture();
     _subscriptions.add(
       _player.stream.error.listen((error) {
+        if (!_closed && error.trim().isNotEmpty) {
+          _recordPlayback('[Play] 播放器异步错误: $error; $_playbackStateSummary');
+        }
         if (_enhancement.handlePlaybackError(error)) return;
         if (!_closed && _acceptErrors && mounted && error.trim().isNotEmpty) {
           _queueRecovery();
+        }
+      }),
+    );
+    _subscriptions.add(
+      _player.stream.log.listen((log) {
+        if (!_closed && (log.level == 'error' || log.level == 'fatal')) {
+          _recordPlayback(
+            '[Play] MPV ${log.level} [${log.prefix}]: ${log.text.trim()}',
+          );
         }
       }),
     );
@@ -248,6 +260,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           final duration = _player.state.duration;
           if (duration <= Duration.zero ||
               _player.state.position < duration - const Duration(seconds: 2)) {
+            _recordPlayback('[Play] 播放异常提前结束: $_playbackStateSummary');
             _queueRecovery();
           } else if (_autoAdvance &&
               _foreground &&
@@ -315,6 +328,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             foreground: _foreground,
             now: DateTime.now(),
           )) {
+        _recordPlayback('[Play] 播放进度停滞: $_playbackStateSummary');
         unawaited(_recover());
       }
     });
@@ -749,6 +763,33 @@ class _PlayerScreenState extends State<PlayerScreen>
     _applyLifecycleVisibility();
   }
 
+  String get _playbackStateSummary {
+    final state = _player.state;
+    return 'episode=${_index + 1}, generation=$_generation, '
+        'position=${state.position.inMilliseconds}ms, '
+        'duration=${state.duration.inMilliseconds}ms, '
+        'buffer=${state.buffer.inMilliseconds}ms, '
+        'playing=${state.playing}, buffering=${state.buffering}, '
+        'video=${state.width ?? 0}x${state.height ?? 0}';
+  }
+
+  void _recordPlayback(String message, {PlaybackPlan? plan}) {
+    final current = plan ?? _plan;
+    DiaryService.add(
+      message,
+      sensitiveValues: [
+        if (current != null) current.decryptionKey,
+        if (current != null)
+          for (final header in current.headers.entries)
+            if (RegExp(
+              r'^(authorization|cookie|set-cookie|x-api-key|x-auth-token)$',
+              caseSensitive: false,
+            ).hasMatch(header.key))
+              header.value,
+      ],
+    );
+  }
+
   void _queueRecovery() {
     if (_closed || !_acceptErrors || _error != null) {
       return;
@@ -792,6 +833,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     final action = current.local
         ? PlaybackRecoveryAction.stop
         : _recovery.next(current);
+    _recordPlayback(
+      '[Play] 自动恢复 action=${action.name}, '
+      'route=${current.routeIndex + 1}/${current.routeCount}, '
+      'quality=${current.quality}, $_playbackStateSummary',
+    );
     if (action == PlaybackRecoveryAction.stop) {
       _resumePosition = position;
       final ticket = _generation;
@@ -1038,6 +1084,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                   : 'protocol_whitelist=[http,https,tcp,tls,crypto,data,file]',
               if (plan.decryptionKey.isNotEmpty)
                 'decryption_key=${plan.decryptionKey}',
+              if (plan.decryptionKey.isNotEmpty)
+                'seg_format_options=decryption_key=${plan.decryptionKey}',
             ].join(','),
           );
           await platform.setProperty('network-timeout', '20');
@@ -1045,7 +1093,16 @@ class _PlayerScreenState extends State<PlayerScreen>
         _plan = plan;
         installed = true;
         _acceptErrors = true;
-        DiaryService.add('[Play] 调用 _player.open: url=${plan.url}, headers=${plan.headers.keys.toList()}');
+        final extension = Uri.tryParse(plan.url)?.path.split('.').last.toLowerCase();
+        final format = const {'mp4', 'm3u8', 'ts', 'm4s'}.contains(extension)
+            ? extension
+            : 'unknown';
+        _recordPlayback(
+          '[Play] 调用 _player.open: url=${plan.url}, '
+          'headers=${plan.headers.keys.toList()}, '
+          'format=$format, encrypted=${plan.decryptionKey.isNotEmpty}',
+          plan: plan,
+        );
         await _player.open(
           Media(
             plan.url,
@@ -1060,6 +1117,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           return;
         }
         _openedIndex = index;
+        _recordPlayback('[Play] 播放器 open 已返回: $_playbackStateSummary');
         _enhancement.mediaReady();
         _attachLanPlayback();
         _health.reset();
@@ -1075,7 +1133,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         }
       });
     } catch (error) {
-      DiaryService.add('[Play] 捕获播放流程错误: $error');
+      _recordPlayback('[Play] 捕获播放流程错误: $error', plan: prepared);
       if (!_closed && mounted && ticket == _generation) {
         if (prepared != null && identical(_plan, prepared)) {
           _acceptErrors = true;

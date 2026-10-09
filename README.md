@@ -2,7 +2,7 @@
 
 > ⚠️ **免责声明**：本项目源码来自网上大名鼎鼎的**鱼佬**（原作者）。我只是把它拿来打包、测试着玩，方便自己用，**不保证任何可用性，随时可能删库**。
 
-Flutter 多端独立短剧 / 影视应用，原名「短剧库 APP」。站源请求、解析、下载和播放均在设备上完成，不依赖自建服务。当前源码版本：**0.2.51+57**。
+Flutter 多端独立短剧 / 影视应用，原名「短剧库 APP」。站源请求、解析、下载和播放均在设备上完成，不依赖自建服务。当前源码版本：**0.2.65+72**。
 
 本轮在 0.2.50 基线上新增两个原生站源：**韩小圈**（`hanxiaoquan`，韩剧 / 韩国电影 / 韩国综艺 / 韩国动漫）与**鬼片网**（`guipian`，鬼片 / 电视剧 / 动漫）。默认可见站源顺序为：**红果 → 韩小圈 → 鬼片 → 青空**。
 
@@ -70,7 +70,7 @@ Flutter 多端独立短剧 / 影视应用，原名「短剧库 APP」。站源�
 | Android 8.0+ | 三架构（arm64-v8a / armeabi-v7a / x86_64）APK；同一签名可覆盖升级 |
 | Windows 10/11 x64 | 完整 ZIP 解压后运行 `hongguojian.exe` / `zhenguojian.exe`，保留所有 DLL 与 `data`；局域网原生发现依赖 Windows 10 1903+ |
 | Android TV | 与手机共用源码，自动识别电视模式并保持横屏；待电视 / 盒子实机验收 |
-| iOS 15.1+ | 2026-10-09 已通过 macOS Actions Release 编译和未签名 IPA 校验；iOS 播放页禁用 media_kit_video 硬件纹理加速以规避 libmpv 渲染崩溃；Windows 自签安装及真机播放仍待验收 |
+| iOS 15.1+ | 0.2.64+71 已通过 macOS Actions Release 编译和未签名 IPA 校验，用户已安装并启动，但反馈红果播放自动恢复失败；0.2.65+72 修复媒体类型误判、补充 HLS 分片密钥传递和错误日记，待构建及真机复验；iOS 播放页仍禁用 media_kit_video 硬件纹理加速 |
 
 `INSTALL_FAILED_NO_MATCHING_ABIS` 表示 APK 与设备架构不匹配，请更换对应架构安装包。
 
@@ -88,6 +88,8 @@ Flutter 多端独立短剧 / 影视应用，原名「短剧库 APP」。站源�
 Fork 中的 `.github/workflows/ios-unsigned.yml` 仅通过 `workflow_dispatch` 手动运行，使用 `macos-latest` 的完整 Xcode，配置 Flutter 3.47.4、Go（按 `native/go.mod`）、Python 3.12 和 CocoaPods，然后执行 `python3 scripts/build_ios.py --all-sources`。脚本使用 `flutter build ios --no-codesign`，将真机 arm64 应用打包为 `Payload/Runner.app`，生成 `dist/ios/zhenguojian-版本-ios-unsigned.ipa`。无需配置 Apple ID、开发者证书、描述文件或签名 Secrets；此 workflow 不发布 Release。iOS 编译是否通过以实际 Actions 运行结果为准，安装、播放等行为仍需真机验收。
 
 验证记录：2026-10-09，Fork 的 [运行 #3](https://github.com/djbbbbb/guoapp/actions/runs/37875232354)在提交 `b509af3` 上完成构建、arm64 检查、FFI 入口检查、IPA 结构与 ZIP 完整性检查、真果鉴名称检查及 artifact 上传。产物为 `zhenguojian-0.2.64+71-ios-unsigned.ipa`，可在该次运行的 `zhenguojian-ios-unsigned` artifact 中下载。环境为 Xcode 26.6、Flutter 3.47.4、Dart 3.13.3、Go 1.24.1、CocoaPods 1.17.0。首次构建发现锁文件缺少 `video_player` 及六项传递依赖，已补齐版本和官方 SHA256，保留 `--enforce-lockfile` 校验。
+
+0.2.65+72 播放修复：本地代理仅依据媒体角色、响应类型、实际扩展名和播放列表内容识别 HLS，避免地址中含 `hls` / `m3u8` 或会话携带 AES 密钥时误把 MP4、初始化文件和 TS 当作播放列表。CENC 密钥同时传入直接 MP4 及 HLS 的嵌套分片解封装器。播放日记增加播放器错误、底层错误日志、异常结束及自动恢复状态，隐藏媒体鉴权地址和密钥；若新包仍提示恢复失败，复制这一版本的日记用于定位。手动 workflow 在打包前运行合成 HLS / MP4 代理回归和日记脱敏测试；这些检查不替代 iPhone 实际播放验收。
 
 Windows 用户按以下步骤操作：
 
