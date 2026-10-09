@@ -76,15 +76,27 @@ Flutter 多端独立短剧 / 影视应用，原名「短剧库 APP」。站源�
 
 ### GitHub Actions
 
-推送 `main` / `master`、`v*` 标签、提交 PR，或手动运行 **Build app packages**，会先检查再构建两版（默认与 `--all-sources`）：
+推送 `main` / `master`、`v*` 标签、提交 PR，或手动运行 **Build app packages**，会运行检查并构建两版 Android（默认与 `--all-sources`）；该 workflow 的 Windows 和 iOS 任务目前禁用。
 
 | 产物 | 内容 |
 | --- | --- |
 | `*-android` | 三种架构 APK 和 SHA256 |
-| `*-windows` | 完整 ZIP 和 SHA256 |
-| `*-ios-unsigned` | 未签名 `.app` ZIP 和 SHA256，不能直接当已签名 IPA 安装 |
+| `zhenguojian-ios-unsigned` | 独立手动 iOS workflow 生成的未签名 IPA 和 SHA256 |
 
-推送 `main` 且 android / ios / windows 全部构建成功时，自动创建 / 更新 GitHub Release（tag `app-v{version}`）。发布新版本前需先在 `pubspec.yaml` 提升 `version`，否则会覆盖同名 tag 的 Release。
+现有 **Build app packages** 在 Android 构建成功时自动创建 / 更新 GitHub Release（tag `app-v{version}`）。发布新版本前需先在 `pubspec.yaml` 提升 `version`，否则会覆盖同名 tag 的 Release。
+
+Fork 中的 `.github/workflows/ios-unsigned.yml` 仅通过 `workflow_dispatch` 手动运行，使用 `macos-latest` 的完整 Xcode，配置 Flutter 3.47.4、Go（按 `native/go.mod`）、Python 3.12 和 CocoaPods，然后执行 `python3 scripts/build_ios.py --all-sources`。脚本使用 `flutter build ios --no-codesign`，将真机 arm64 应用打包为 `Payload/Runner.app`，生成 `dist/ios/zhenguojian-版本-ios-unsigned.ipa`。无需配置 Apple ID、开发者证书、描述文件或签名 Secrets；此 workflow 不发布 Release。iOS 编译是否通过以实际 Actions 运行结果为准，安装、播放等行为仍需真机验收。
+
+Windows 用户按以下步骤操作：
+
+1. 在自己的 Fork 中将 workflow 放入默认分支（通常为 `main`），进入 **Actions**；若提示 Fork 的 workflows 尚未启用，先点击启用按钮。
+2. 左侧选择 **Build Zhenguojian unsigned IPA**，点击 **Run workflow**，选择 `main` 并运行。
+3. 打开该次运行，确认构建、IPA 校验和上传步骤全部成功，在 **Artifacts** 下载 `zhenguojian-ios-unsigned`，解压外层 ZIP 后取得 `.ipa`。产物保留 14 天；不能直接把外层 artifact ZIP 当作 IPA。`SHA256SUMS.txt` 同时记录脚本生成的 `.app` ZIP，该文件未包含在此 artifact 中。
+4. 失败时打开红色步骤查看首个错误；若已进入编译步骤，可下载 `zhenguojian-ios-build-log`。安装依赖阶段的错误直接查看 Actions 步骤日志。修复后重新运行，不把失败运行中的文件当作成功产物。
+5. 从 [Sideloadly 官网](https://sideloadly.io/) 下载 Windows 版，并按官网要求安装网页版 iTunes 和 iCloud。用 USB 连接 iPhone、解锁并信任电脑，将 `.ipa` 拖入 Sideloadly，选择设备，在 Windows 签名工具中输入自己的 Apple ID，点击 Start，按提示完成验证和安装。账号、验证码和签名材料均不填入 GitHub。
+6. 根据 iPhone 提示在「设置 → 通用 → VPN 与设备管理」信任开发者；需要时按 [Apple 说明](https://developer.apple.com/documentation/xcode/enabling-developer-mode-on-a-device)启用开发者模式。免费 Apple ID 的签名通常有效 7 天，需定期重新签名；可使用 Sideloadly 的自动续签功能。应用要求 iOS 15.1 或更高版本。
+
+未签名 IPA 是后续自签的输入，不能直接安装到普通 iPhone。Windows 本地不需要安装 Xcode。
 
 Android 正式发布使用同一签名并递增构建号，在仓库 Secrets 配置：`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。未配置时生成 debug 签名预览包。
 

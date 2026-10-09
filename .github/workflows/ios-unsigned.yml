@@ -1,0 +1,103 @@
+name: Build Zhenguojian unsigned IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-unsigned-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOPROXY: https://proxy.golang.org,direct
+  GOSUMDB: sum.golang.org
+  GOTOOLCHAIN: auto
+  COCOAPODS_DISABLE_STATS: 'true'
+
+jobs:
+  ios:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - name: Prepare iOS build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcode-select -p
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          if ! command -v pod >/dev/null 2>&1; then
+            sudo gem install cocoapods --no-document
+          fi
+          pod --version
+          python3 --version
+          go version
+          flutter --version
+          flutter precache --ios
+          flutter doctor -v
+      - name: Build all-sources unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/build_ios.py --all-sources 2>&1 | tee ios-build.log
+      - name: Verify IPA structure and edition
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun lipo -verify_arch arm64 build/ios/iphoneos/Runner.app/Runner
+          python3 - <<'PY'
+          from pathlib import Path
+          import plistlib
+          import zipfile
+
+          packages = list(Path('dist/ios').glob('zhenguojian-*-ios-unsigned.ipa'))
+          if len(packages) != 1:
+              raise SystemExit(f'Expected one unsigned Zhenguojian IPA, found {len(packages)}')
+          with zipfile.ZipFile(packages[0]) as archive:
+              names = set(archive.namelist())
+              prefix = 'Payload/Runner.app/'
+              for relative in ('Info.plist', 'Runner', 'Frameworks/App.framework/App',
+                               'Frameworks/Flutter.framework/Flutter'):
+                  if prefix + relative not in names:
+                      raise SystemExit('IPA is missing ' + prefix + relative)
+              if prefix + 'embedded.mobileprovision' in names:
+                  raise SystemExit('Unexpected provisioning profile in unsigned IPA')
+              info = plistlib.loads(archive.read(prefix + 'Info.plist'))
+              if info.get('CFBundleDisplayName') != '真果鉴':
+                  raise SystemExit('IPA is not the all-sources edition')
+              if archive.testzip() is not None:
+                  raise SystemExit('IPA ZIP integrity check failed')
+          print('Validated:', packages[0])
+          PY
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: zhenguojian-ios-unsigned
+          path: |
+            dist/ios/*.ipa
+            dist/ios/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zhenguojian-ios-build-log
+          path: ios-build.log
+          if-no-files-found: ignore
+          retention-days: 14
