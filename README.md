@@ -70,7 +70,7 @@ Flutter 多端独立短剧 / 影视应用，原名「短剧库 APP」。站源�
 | Android 8.0+ | 三架构（arm64-v8a / armeabi-v7a / x86_64）APK；同一签名可覆盖升级 |
 | Windows 10/11 x64 | 完整 ZIP 解压后运行 `hongguojian.exe` / `zhenguojian.exe`，保留所有 DLL 与 `data`；局域网原生发现依赖 Windows 10 1903+ |
 | Android TV | 与手机共用源码，自动识别电视模式并保持横屏；待电视 / 盒子实机验收 |
-| iOS 15.1+ | 0.2.64+71 已通过 macOS Actions Release 编译和未签名 IPA 校验，用户已安装并启动，但反馈红果播放自动恢复失败；0.2.65+72 修复媒体类型误判、补充 HLS 分片密钥传递和错误日记，待构建及真机复验；iOS 播放页仍禁用 media_kit_video 硬件纹理加速 |
+| iOS 15.1+ | 0.2.64+71 用户已安装并启动，但反馈红果及其他源无法播放；0.2.65+72 已完成媒体类型误判修复、HLS 分片密钥传递及错误日记，已通过 macOS Actions Release 编译和未签名 IPA 校验，真机播放仍待复验；iOS 播放页仍禁用 media_kit_video 硬件纹理加速 |
 
 `INSTALL_FAILED_NO_MATCHING_ABIS` 表示 APK 与设备架构不匹配，请更换对应架构安装包。
 
@@ -90,6 +90,8 @@ Fork 中的 `.github/workflows/ios-unsigned.yml` 仅通过 `workflow_dispatch` �
 验证记录：2026-10-09，Fork 的 [运行 #3](https://github.com/djbbbbb/guoapp/actions/runs/37875232354)在提交 `b509af3` 上完成构建、arm64 检查、FFI 入口检查、IPA 结构与 ZIP 完整性检查、真果鉴名称检查及 artifact 上传。产物为 `zhenguojian-0.2.64+71-ios-unsigned.ipa`，可在该次运行的 `zhenguojian-ios-unsigned` artifact 中下载。环境为 Xcode 26.6、Flutter 3.47.4、Dart 3.13.3、Go 1.24.1、CocoaPods 1.17.0。首次构建发现锁文件缺少 `video_player` 及六项传递依赖，已补齐版本和官方 SHA256，保留 `--enforce-lockfile` 校验。
 
 0.2.65+72 播放修复：本地代理仅依据媒体角色、响应类型、实际扩展名和播放列表内容识别 HLS，避免地址中含 `hls` / `m3u8` 或会话携带 AES 密钥时误把 MP4、初始化文件和 TS 当作播放列表。CENC 密钥同时传入直接 MP4 及 HLS 的嵌套分片解封装器。播放日记增加播放器错误、底层错误日志、异常结束及自动恢复状态，隐藏媒体鉴权地址和密钥；若新包仍提示恢复失败，复制这一版本的日记用于定位。手动 workflow 在打包前运行合成 HLS / MP4 代理回归和日记脱敏测试；这些检查不替代 iPhone 实际播放验收。
+
+验证记录：2026-10-09，[运行 #4](https://github.com/djbbbbb/guoapp/actions/runs/37880819684)在提交 `8208502` 上成功生成并上传 `zhenguojian-0.2.65+72-ios-unsigned.ipa`。5 个 Go 代理 / 会话回归、4 个日记脱敏用例及 1 个播放恢复 widget 用例通过，arm64、FFI、IPA 结构和 ZIP 完整性校验通过。可选的 `TestNativeHLSDecodesEncryptedSyntheticMedia` 因 Runner 没有 FFmpeg 跳过，未进行真实站源或 iPhone 播放验收。旧版日志未记录播放器异步错误，不能据此认定所有站源失败的唯一原因已经确认。
 
 Windows 用户按以下步骤操作：
 
